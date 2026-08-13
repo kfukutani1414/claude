@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFラベルメーカ</title>
+<style>
+  body {
+    font-family: sans-serif;
+    max-width: 480px;
+    margin: 40px auto;
+    padding: 0 16px;
+    color: #222;
+  }
+  h1 {
+    font-size: 1.4em;
+    margin-bottom: 24px;
+  }
+  fieldset {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    padding: 12px 16px 16px;
+  }
+  legend {
+    font-weight: bold;
+    padding: 0 4px;
+  }
+  .paperInfo {
+    color: #555;
+  }
+  .formRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .formRow label {
+    flex: 0 0 auto;
+    min-width: 6em;
+  }
+  .formRow input[type="number"] {
+    width: 5em;
+  }
+  .marginGrid {
+    display: grid;
+    grid-template-columns: auto 5em auto 5em;
+    gap: 8px;
+    align-items: center;
+  }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    resize: vertical;
+  }
+  button {
+    width: 100%;
+    padding: 10px;
+    font-size: 1em;
+    cursor: pointer;
+  }
+  .statusMessage {
+    min-height: 1.2em;
+    margin-top: 8px;
+    color: #555;
+    font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+
+<h1>PDFラベルメーカ</h1>
+
+<form id="labelForm">
+
+  <fieldset>
+    <legend>用紙</legend>
+    <p class="paperInfo">A4（210mm × 297mm）・縦向き</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>余白（mm）</legend>
+    <div class="marginGrid">
+      <label for="marginTop">上</label>
+      <input type="number" id="marginTop" name="marginTop" value="10" min="0" step="0.5">
+      <label for="marginRight">右</label>
+      <input type="number" id="marginRight" name="marginRight" value="10" min="0" step="0.5">
+      <label for="marginBottom">下</label>
+      <input type="number" id="marginBottom" name="marginBottom" value="10" min="0" step="0.5">
+      <label for="marginLeft">左</label>
+      <input type="number" id="marginLeft" name="marginLeft" value="10" min="0" step="0.5">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>ラベルサイズ（mm）</legend>
+    <div class="formRow">
+      <label for="labelWidth">幅</label>
+      <input type="number" id="labelWidth" name="labelWidth" value="70" min="1" step="0.5">
+      <label for="labelHeight">高さ</label>
+      <input type="number" id="labelHeight" name="labelHeight" value="37" min="1" step="0.5">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>ラベル間の余白（mm）</legend>
+    <div class="formRow">
+      <label for="labelGap">間隔</label>
+      <input type="number" id="labelGap" name="labelGap" value="2" min="0" step="0.5">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>テキスト</legend>
+    <div class="formRow">
+      <label for="fontSize">フォントサイズ</label>
+      <input type="number" id="fontSize" name="fontSize" value="10" min="1" step="0.5">
+      <span>pt</span>
+    </div>
+    <textarea id="labelText" name="labelText" rows="4" placeholder="すべてのラベルに印字するテキストを入力してください"></textarea>
+  </fieldset>
+
+  <button type="button" id="createPdfButton">PDFを作成</button>
+  <p id="statusMessage" class="statusMessage"></p>
+
+</form>
+
+<!-- PDF生成にはjsPDFライブラリを使う -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
+<script>
+  // 日本語フォント（NotoSansJP）のTTFファイルのURL
+  // jsPDF用に変換済みのフォントJSを配布するCDNは存在しないため、
+  // Google Fontsの公式リポジトリからTTFを直接取得しbase64変換して使用する
+  var notoSansJpFontUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf';
+  var notoSansJpFontName = 'NotoSansJP';
+
+  // 一度取得したフォント（base64）をキャッシュし、次回以降のPDF生成で再利用する
+  var cachedFontBase64 = null;
+
+  // ステータス表示欄
+  var statusMessageElement = document.getElementById('statusMessage');
+  function showStatus(message) {
+    statusMessageElement.textContent = message;
+  }
+
+  // ArrayBufferをbase64文字列に変換する
+  function arrayBufferToBase64(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var binary = '';
+    var chunkSize = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunkSize) {
+      var chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
+  }
+
+  // NotoSansJPフォントを取得してbase64文字列を返す（キャッシュがあればそれを使う）
+  function loadFontBase64() {
+    if (cachedFontBase64) {
+      return Promise.resolve(cachedFontBase64);
+    }
+    showStatus('フォントを読み込み中…（初回のみ、数MBのダウンロードが発生します）');
+    return fetch(notoSansJpFontUrl)
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('フォントの取得に失敗しました（HTTP ' + response.status + '）');
+        }
+        return response.arrayBuffer();
+      })
+      .then(function (buffer) {
+        cachedFontBase64 = arrayBufferToBase64(buffer);
+        return cachedFontBase64;
+      });
+  }
+
+  // 入力値を読み取る
+  function readFormValues() {
+    return {
+      marginTop: Number(document.getElementById('marginTop').value),
+      marginRight: Number(document.getElementById('marginRight').value),
+      marginBottom: Number(document.getElementById('marginBottom').value),
+      marginLeft: Number(document.getElementById('marginLeft').value),
+      labelWidth: Number(document.getElementById('labelWidth').value),
+      labelHeight: Number(document.getElementById('labelHeight').value),
+      labelGap: Number(document.getElementById('labelGap').value),
+      fontSize: Number(document.getElementById('fontSize').value),
+      labelText: document.getElementById('labelText').value
+    };
+  }
+
+  // 用紙サイズ（A4・縦向き固定）
+  var paperWidthMm = 210;
+  var paperHeightMm = 297;
+
+  // ラベル内余白（パディング、固定値）
+  var labelPaddingMm = 2;
+
+  // 行数・列数を計算する
+  function calculateLayout(values) {
+    var usableWidth = paperWidthMm - values.marginLeft - values.marginRight;
+    var usableHeight = paperHeightMm - values.marginTop - values.marginBottom;
+    var columns = Math.floor((usableWidth + values.labelGap) / (values.labelWidth + values.labelGap));
+    var rows = Math.floor((usableHeight + values.labelGap) / (values.labelHeight + values.labelGap));
+    return { columns: columns, rows: rows };
+  }
+
+  // PDFを生成してブラウザの新しいタブで表示する
+  // 生成できた場合はtrue、配置できずに中止した場合はfalseを返す
+  function createPdf(values, fontBase64) {
+    var layout = calculateLayout(values);
+    if (layout.columns < 1 || layout.rows < 1) {
+      showStatus('この設定では用紙にラベルを1枚も配置できません。余白やラベルサイズを見直してください。');
+      return false;
+    }
+
+    var doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    // 日本語フォントを登録する
+    doc.addFileToVFS(notoSansJpFontName + '-Regular.ttf', fontBase64);
+    doc.addFont(notoSansJpFontName + '-Regular.ttf', notoSansJpFontName, 'normal');
+    doc.setFont(notoSansJpFontName, 'normal');
+    doc.setFontSize(values.fontSize);
+    doc.setLineHeightFactor(1.2);
+
+    // 枠線のスタイル
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+
+    // テキストの折り返し幅（ラベル幅からパディング分を差し引く）
+    var textMaxWidth = values.labelWidth - labelPaddingMm * 2;
+    var rawLines = values.labelText.split('\n');
+    var wrappedLines = [];
+    rawLines.forEach(function (rawLine) {
+      if (rawLine === '') {
+        wrappedLines.push('');
+      } else {
+        wrappedLines = wrappedLines.concat(doc.splitTextToSize(rawLine, textMaxWidth));
+      }
+    });
+
+    for (var row = 0; row < layout.rows; row++) {
+      for (var column = 0; column < layout.columns; column++) {
+        var labelX = values.marginLeft + column * (values.labelWidth + values.labelGap);
+        var labelY = values.marginTop + row * (values.labelHeight + values.labelGap);
+
+        // 枠線を描画する
+        doc.rect(labelX, labelY, values.labelWidth, values.labelHeight);
+
+        // テキストを左上揃えで描画する
+        doc.text(wrappedLines, labelX + labelPaddingMm, labelY + labelPaddingMm, { baseline: 'top' });
+      }
+    }
+
+    // 生成したPDFをブラウザの新しいタブで表示する
+    var blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+    return true;
+  }
+
+  // PDF生成ボタン
+  var createPdfButton = document.getElementById('createPdfButton');
+  createPdfButton.addEventListener('click', function () {
+    var values = readFormValues();
+    createPdfButton.disabled = true;
+
+    loadFontBase64()
+      .then(function (fontBase64) {
+        showStatus('PDFを作成しています…');
+        var succeeded = createPdf(values, fontBase64);
+        if (succeeded) {
+          showStatus('');
+        }
+      })
+      .catch(function (error) {
+        showStatus('エラーが発生しました: ' + error.message);
+      })
+      .finally(function () {
+        createPdfButton.disabled = false;
+      });
+  });
+</script>
+
+</body>
+</html>

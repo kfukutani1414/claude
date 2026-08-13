@@ -5,8 +5,11 @@
 
 ## 技術仕様
 - HTML + JavaScript（サーバー不要、ブラウザだけで動く）
-- PDF生成にはjsPDFライブラリを使う（jsdelivr等の安定版CDNから最新安定版を読み込む）
-- 日本語フォントはNotoSansJPを使う。CDN上で配布されているjsPDF用にbase64変換済みのフォントJS（例: `NotoSansJP-Regular-normal.js`）を`<script src>`で読み込み、jsPDFのVFSに自動登録する（実行時にTTF/OTFをfetchしてbase64変換する方式は取らない。CORSやfile://実行時の制約を避けるため）
+- PDF生成にはjsPDFライブラリを使う（jsdelivrから読み込む。バージョンを固定する: `https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js`）
+- 日本語フォントはNotoSansJPを使う。jsPDF用にbase64変換済みのフォントJSを配布するCDNは実在しないため、PDF生成時にGoogle Fontsの公式リポジトリ（`google/fonts`）のTTFファイルをjsdelivrのGitHubミラー経由でfetchし、ブラウザ上でbase64変換してjsPDFのVFSに登録する方式を取る
+  - URL: `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf`（可変フォント、約9MB。デフォルトインスタンスがRegular相当のため追加処理不要）
+  - 初回のPDF生成時に1回だけfetchし、変換結果はメモリ上にキャッシュして以降のPDF生成で再利用する（毎回fetchしない）
+  - fetch中はボタンを無効化し「フォントを読み込み中…」等のステータスを表示する
 - ウェイトはRegularのみ対応（Boldは不要）
 
 ## ラベルの仕様
