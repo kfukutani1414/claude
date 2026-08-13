@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>落ちゲー - テトリス風</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #43436b, #2b2b45);
+    color: #eee;
+    font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .app {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 12px;
+    letter-spacing: 2px;
+  }
+  .board-wrap {
+    position: relative;
+    background: #22223a;
+    border: 4px solid #6a72a8;
+    border-radius: 8px;
+    box-shadow: 0 0 24px rgba(0,0,0,0.4), inset 0 0 12px rgba(0,0,0,0.4);
+    padding: 6px;
+  }
+  canvas {
+    display: block;
+    background: #22223a;
+    image-rendering: pixelated;
+  }
+  .side {
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .panel {
+    background: #2c2c46;
+    border: 2px solid #5c5c85;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    margin: 0 0 8px;
+    color: #9aa0c8;
+    letter-spacing: 1px;
+  }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    margin: 4px 0;
+  }
+  .stat span:last-child {
+    font-weight: bold;
+    color: #ffd866;
+  }
+  #nextCanvas {
+    display: block;
+    margin: 0 auto;
+    background: #22223a;
+    border-radius: 4px;
+  }
+  .controls-list {
+    font-size: 12px;
+    line-height: 1.8;
+    color: #b9bdd8;
+  }
+  .controls-list b {
+    color: #fff;
+    display: inline-block;
+    width: 92px;
+  }
+  button {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #6c5ce7, #4834d4);
+    color: #fff;
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: transform 0.1s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(5,5,10,0.85);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-radius: 6px;
+    gap: 10px;
+    z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .overlay h2 {
+    font-size: 24px;
+    margin: 0;
+    color: #ff6b6b;
+    text-shadow: 0 0 10px rgba(255,107,107,0.6);
+  }
+  .overlay p {
+    margin: 0;
+    color: #ccc;
+    font-size: 14px;
+  }
+  .overlay.paused h2 {
+    color: #ffd866;
+    text-shadow: 0 0 10px rgba(255,216,102,0.6);
+  }
+  .mobile-controls {
+    display: none;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .mobile-controls button {
+    flex: 1 1 30%;
+    padding: 14px 4px;
+    font-size: 18px;
+  }
+  @media (max-width: 720px) {
+    .app { flex-direction: column; align-items: center; }
+    .side { width: 100%; max-width: 340px; }
+    .mobile-controls { display: flex; }
+  }
+  .title-screen {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #43436b, #2b2b45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    z-index: 100;
+    text-align: center;
+    color: #eee;
+    font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    padding: 16px;
+  }
+  .title-screen.hide { display: none; }
+  .title-screen h1 {
+    font-size: 40px;
+    margin: 0;
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(108,92,231,0.7);
+  }
+  .high-score-box {
+    background: #2c2c46;
+    border: 2px solid #5c5c85;
+    border-radius: 10px;
+    padding: 14px 32px;
+    font-size: 14px;
+    color: #9aa0c8;
+    letter-spacing: 1px;
+  }
+  .high-score-box .value {
+    display: block;
+    margin-top: 6px;
+    font-size: 30px;
+    font-weight: bold;
+    color: #ffd866;
+    letter-spacing: 1px;
+  }
+  #startBtn {
+    padding: 16px 56px;
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+<div class="title-screen" id="titleScreen">
+  <h1>🧱 落ちゲー</h1>
+  <div class="high-score-box">
+    ハイスコア
+    <span class="value" id="titleHighScore">0</span>
+  </div>
+  <button id="startBtn" onclick="startGame()">▶ スタート</button>
+</div>
+<div class="app">
+  <div>
+    <h1>🧱 落ちゲー</h1>
+    <div class="board-wrap">
+      <canvas id="board" width="240" height="480"></canvas>
+      <div class="overlay" id="overlay">
+        <h2 id="overlayTitle">GAME OVER</h2>
+        <p id="overlayText">Rキーでリスタート</p>
+        <button onclick="restartGame()">もう一度あそぶ</button>
+      </div>
+    </div>
+    <div class="mobile-controls">
+      <button ontouchstart="event.preventDefault();moveLeft()" onclick="moveLeft()">◀</button>
+      <button ontouchstart="event.preventDefault();rotatePiece()" onclick="rotatePiece()">⟳</button>
+      <button ontouchstart="event.preventDefault();moveRight()" onclick="moveRight()">▶</button>
+      <button ontouchstart="event.preventDefault();softDrop()" onclick="softDrop()">▼ ソフト</button>
+      <button ontouchstart="event.preventDefault();hardDrop()" onclick="hardDrop()">⤓ ハード</button>
+      <button ontouchstart="event.preventDefault();togglePause()" onclick="togglePause()">⏸ 一時停止</button>
+    </div>
+  </div>
+  <div class="side">
+    <div class="panel">
+      <h2>NEXT</h2>
+      <canvas id="nextCanvas" width="120" height="120"></canvas>
+    </div>
+    <div class="panel">
+      <h2>STATUS</h2>
+      <div class="stat"><span>スコア</span><span id="score">0</span></div>
+      <div class="stat"><span>ハイスコア</span><span id="highScore">0</span></div>
+      <div class="stat"><span>ライン</span><span id="lines">0</span></div>
+      <div class="stat"><span>レベル</span><span id="level">1</span></div>
+      <div class="stat"><span>コンボ</span><span id="combo">0</span></div>
+    </div>
+    <div class="panel">
+      <h2>操作方法</h2>
+      <div class="controls-list">
+        <div><b>← →</b>移動</div>
+        <div><b>↑ / X</b>回転</div>
+        <div><b>Z</b>逆回転</div>
+        <div><b>↓</b>ソフトドロップ</div>
+        <div><b>Space</b>ハードドロップ</div>
+        <div><b>P</b>一時停止</div>
+        <div><b>R</b>リスタート</div>
+      </div>
+    </div>
+    <button onclick="togglePause()">⏸ 一時停止</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------- 定数 -------
+  const COLS = 10;
+  const ROWS = 20;
+  const BLOCK = 24; // px
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const nextCanvas = document.getElementById("nextCanvas");
+  const nctx = nextCanvas.getContext("2d");
+
+  canvas.width = COLS * BLOCK;
+  canvas.height = ROWS * BLOCK;
+
+  const overlay = document.getElementById("overlay");
+  const overlayTitle = document.getElementById("overlayTitle");
+  const overlayText = document.getElementById("overlayText");
+  const scoreEl = document.getElementById("score");
+  const highScoreEl = document.getElementById("highScore");
+  const linesEl = document.getElementById("lines");
+  const levelEl = document.getElementById("level");
+  const comboEl = document.getElementById("combo");
+  const titleScreen = document.getElementById("titleScreen");
+  const titleHighScoreEl = document.getElementById("titleHighScore");
+
+  // ------- ハイスコア -------
+  const HIGH_SCORE_KEY = "ochigee-tetris-highscore";
+  let highScore = Number(localStorage.getItem(HIGH_SCORE_KEY)) || 0;
+
+  function updateHighScoreDisplay() {
+    highScoreEl.textContent = highScore;
+    titleHighScoreEl.textContent = highScore;
+  }
+
+  function saveHighScoreIfNeeded() {
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem(HIGH_SCORE_KEY, String(highScore));
+      updateHighScoreDisplay();
+      return true;
+    }
+    return false;
+  }
+
+  // ------- テトリミノ定義 (SRS風の4x4/3x3行列) -------
+  const SHAPES = {
+    I: { color: "#4fd1e8", cells: [[0,1],[1,1],[2,1],[3,1]], size: 4 },
+    O: { color: "#f7d94c", cells: [[1,0],[2,0],[1,1],[2,1]], size: 4 },
+    T: { color: "#b06cf7", cells: [[1,0],[0,1],[1,1],[2,1]], size: 4 },
+    S: { color: "#5ee88f", cells: [[1,0],[2,0],[0,1],[1,1]], size: 4 },
+    Z: { color: "#f75c5c", cells: [[0,0],[1,0],[1,1],[2,1]], size: 4 },
+    J: { color: "#5c8df7", cells: [[0,0],[0,1],[1,1],[2,1]], size: 4 },
+    L: { color: "#f7a35c", cells: [[2,0],[0,1],[1,1],[2,1]], size: 4 },
+  };
+  const KEYS = Object.keys(SHAPES);
+
+  // ------- 状態 -------
+  let board = createEmptyBoard();
+  let current = null;
+  let nextType = null;
+  let score = 0;
+  let lines = 0;
+  let level = 1;
+  let comboStreak = 0; // 連続ライン消去回数
+  let dropInterval = 800; // ms
+  let dropTimer = 0;
+  let lastTime = 0;
+  let gameOver = false;
+  let paused = false;
+  let animFrame = null;
+  let started = false;
+
+  function createEmptyBoard() {
+    return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  }
+
+  function randomType() {
+    return KEYS[Math.floor(Math.random() * KEYS.length)];
+  }
+
+  function spawnPiece() {
+    const type = nextType || randomType();
+    nextType = randomType();
+    drawNextPreview();
+    const shape = SHAPES[type];
+    const size = shape.size;
+    const cells = shape.cells.map(([x, y]) => [x, y]);
+    const piece = {
+      type,
+      color: shape.color,
+      cells,
+      size,
+      x: Math.floor((COLS - size) / 2),
+      y: -1,
+    };
+    if (collides(piece, piece.x, piece.y)) {
+      triggerGameOver();
+    }
+    return piece;
+  }
+
+  function drawNextPreview() {
+    nctx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+    const shape = SHAPES[nextType];
+    const cell = 24;
+    const offsetX = (nextCanvas.width - shape.size * cell) / 2;
+    const offsetY = (nextCanvas.height - shape.size * cell) / 2;
+    shape.cells.forEach(([x, y]) => {
+      drawBlock(nctx, offsetX + x * cell, offsetY + y * cell, cell, shape.color);
+    });
+  }
+
+  // ------- 衝突判定 -------
+  function collides(piece, newX, newY, cellsOverride) {
+    const cells = cellsOverride || piece.cells;
+    for (const [cx, cy] of cells) {
+      const x = newX + cx;
+      const y = newY + cy;
+      if (x < 0 || x >= COLS || y >= ROWS) return true;
+      if (y >= 0 && board[y][x]) return true;
+    }
+    return false;
+  }
+
+  function lockPiece() {
+    for (const [cx, cy] of current.cells) {
+      const x = current.x + cx;
+      const y = current.y + cy;
+      if (y >= 0) board[y][x] = current.color;
+    }
+    clearLines();
+    current = spawnPiece();
+    dropTimer = 0;
+  }
+
+  function clearLines() {
+    let cleared = 0;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (board[y].every((cell) => cell !== null)) {
+        board.splice(y, 1);
+        board.unshift(Array(COLS).fill(null));
+        cleared++;
+        y++; // re-check same index after shift
+      }
+    }
+    if (cleared > 0) {
+      comboStreak++;
+      const comboMultiplier = comboStreak >= 3 ? 2 : comboStreak === 2 ? 1.5 : 1;
+      const basePoints = [0, 100, 300, 500, 800][cleared] * level;
+      const points = Math.round(basePoints * comboMultiplier);
+      score += points;
+      lines += cleared;
+      level = Math.floor(lines / 10) + 1;
+      dropInterval = Math.max(100, 800 * Math.pow(0.9, level - 1));
+      updateStats();
+      flashClear();
+    } else {
+      comboStreak = 0;
+      updateStats();
+    }
+  }
+
+  let flashRows = [];
+  function flashClear() {
+    // simple visual pulse via quick redraw (no row tracking needed post-splice)
+  }
+
+  function updateStats() {
+    scoreEl.textContent = score;
+    linesEl.textContent = lines;
+    levelEl.textContent = level;
+    comboEl.textContent = comboStreak;
+  }
+
+  // ------- 回転 (回転行列 + 簡易ウォールキック) -------
+  function rotateCells(cells, size, dir) {
+    // dir: 1 = 時計回り, -1 = 反時計回り
+    const center = (size - 1) / 2;
+    return cells.map(([x, y]) => {
+      const dx = x - center;
+      const dy = y - center;
+      let nx, ny;
+      if (dir === 1) {
+        nx = center - dy;
+        ny = center + dx;
+      } else {
+        nx = center + dy;
+        ny = center - dx;
+      }
+      return [Math.round(nx), Math.round(ny)];
+    });
+  }
+
+  function rotatePiece(dir = 1) {
+    if (gameOver || paused || !current) return;
+    if (current.type === "O") return; // O型は回転不要
+    const rotated = rotateCells(current.cells, current.size, dir);
+    const kicks = [0, -1, 1, -2, 2];
+    for (const k of kicks) {
+      if (!collides(current, current.x + k, current.y, rotated)) {
+        current.cells = rotated;
+        current.x += k;
+        draw();
+        return;
+      }
+    }
+  }
+
+  // ------- 移動操作 -------
+  function moveLeft() {
+    if (gameOver || paused || !current) return;
+    if (!collides(current, current.x - 1, current.y)) {
+      current.x -= 1;
+      draw();
+    }
+  }
+  function moveRight() {
+    if (gameOver || paused || !current) return;
+    if (!collides(current, current.x + 1, current.y)) {
+      current.x += 1;
+      draw();
+    }
+  }
+  function softDrop() {
+    if (gameOver || paused || !current) return;
+    if (!collides(current, current.x, current.y + 1)) {
+      current.y += 1;
+      score += 1;
+      updateStats();
+      dropTimer = 0;
+      draw();
+    } else {
+      lockPiece();
+      draw();
+    }
+  }
+  function hardDrop() {
+    if (gameOver || paused || !current) return;
+    let dist = 0;
+    while (!collides(current, current.x, current.y + 1)) {
+      current.y += 1;
+      dist++;
+    }
+    score += dist * 2;
+    updateStats();
+    lockPiece();
+    draw();
+  }
+
+  function togglePause() {
+    if (gameOver) return;
+    paused = !paused;
+    if (paused) {
+      overlayTitle.textContent = "PAUSE";
+      overlayText.textContent = "Pキーで再開";
+      overlay.classList.add("show", "paused");
+    } else {
+      overlay.classList.remove("show", "paused");
+      lastTime = performance.now();
+    }
+  }
+
+  function triggerGameOver() {
+    gameOver = true;
+    const isNewRecord = saveHighScoreIfNeeded();
+    overlayTitle.textContent = "GAME OVER";
+    overlayText.textContent = "スコア: " + score +
+      (isNewRecord ? " (ハイスコア更新!)" : "") + " / Rキーでリスタート";
+    overlay.classList.remove("paused");
+    overlay.classList.add("show");
+  }
+
+  function restartGame() {
+    board = createEmptyBoard();
+    score = 0;
+    lines = 0;
+    level = 1;
+    comboStreak = 0;
+    dropInterval = 800;
+    dropTimer = 0;
+    gameOver = false;
+    paused = false;
+    overlay.classList.remove("show", "paused");
+    nextType = randomType();
+    current = spawnPiece();
+    updateStats();
+    lastTime = performance.now();
+    draw();
+  }
+  window.restartGame = restartGame;
+
+  function startGame() {
+    if (started) return;
+    started = true;
+    titleScreen.classList.add("hide");
+    lastTime = performance.now();
+  }
+  window.startGame = startGame;
+  window.moveLeft = moveLeft;
+  window.moveRight = moveRight;
+  window.rotatePiece = rotatePiece;
+  window.softDrop = softDrop;
+  window.hardDrop = hardDrop;
+  window.togglePause = togglePause;
+
+  // ------- 描画 -------
+  function drawBlock(context, x, y, size, color) {
+    context.fillStyle = color;
+    context.fillRect(x, y, size, size);
+    context.strokeStyle = "rgba(255,255,255,0.25)";
+    context.lineWidth = 1;
+    context.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    // ハイライト
+    context.fillStyle = "rgba(255,255,255,0.15)";
+    context.fillRect(x, y, size, size * 0.3);
+  }
+
+  function drawGhost() {
+    if (!current) return;
+    let ghostY = current.y;
+    while (!collides(current, current.x, ghostY + 1)) ghostY++;
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    for (const [cx, cy] of current.cells) {
+      const gx = current.x + cx;
+      const gy = ghostY + cy;
+      if (gy >= 0) drawBlock(ctx, gx * BLOCK, gy * BLOCK, BLOCK, current.color);
+    }
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // グリッド背景
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    for (let x = 0; x <= COLS; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * BLOCK, 0);
+      ctx.lineTo(x * BLOCK, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= ROWS; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * BLOCK);
+      ctx.lineTo(canvas.width, y * BLOCK);
+      ctx.stroke();
+    }
+
+    // 固定ブロック
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const color = board[y][x];
+        if (color) drawBlock(ctx, x * BLOCK, y * BLOCK, BLOCK, color);
+      }
+    }
+
+    // ゴースト
+    if (current && !gameOver) drawGhost();
+
+    // 現在のピース
+    if (current) {
+      for (const [cx, cy] of current.cells) {
+        const x = current.x + cx;
+        const y = current.y + cy;
+        if (y >= 0) drawBlock(ctx, x * BLOCK, y * BLOCK, BLOCK, current.color);
+      }
+    }
+  }
+
+  // ------- ゲームループ -------
+  function loop(time) {
+    if (!started) {
+      animFrame = requestAnimationFrame(loop);
+      return;
+    }
+    if (!gameOver && !paused) {
+      const delta = time - lastTime;
+      lastTime = time;
+      dropTimer += delta;
+      if (dropTimer >= dropInterval) {
+        dropTimer = 0;
+        if (!collides(current, current.x, current.y + 1)) {
+          current.y += 1;
+        } else {
+          lockPiece();
+        }
+        draw();
+      }
+    } else {
+      lastTime = time;
+    }
+    animFrame = requestAnimationFrame(loop);
+  }
+
+  // ------- キー入力 -------
+  const keyState = {};
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].includes(e.code)) {
+      e.preventDefault();
+    }
+    if (!started) {
+      if (e.code === "Enter" || e.code === "Space") startGame();
+      return;
+    }
+    if (keyState[e.code]) return; // 押しっぱなし連打防止(リピートはOS側リピートに任せる)
+    keyState[e.code] = true;
+
+    switch (e.code) {
+      case "ArrowLeft":
+        moveLeft();
+        break;
+      case "ArrowRight":
+        moveRight();
+        break;
+      case "ArrowUp":
+      case "KeyX":
+        rotatePiece(1);
+        break;
+      case "KeyZ":
+        rotatePiece(-1);
+        break;
+      case "ArrowDown":
+        softDrop();
+        break;
+      case "Space":
+        hardDrop();
+        break;
+      case "KeyP":
+        togglePause();
+        break;
+      case "KeyR":
+        restartGame();
+        break;
+    }
+  });
+  document.addEventListener("keyup", (e) => {
+    keyState[e.code] = false;
+  });
+
+  // ------- 初期化 -------
+  updateHighScoreDisplay();
+  nextType = randomType();
+  current = spawnPiece();
+  updateStats();
+  draw();
+  animFrame = requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

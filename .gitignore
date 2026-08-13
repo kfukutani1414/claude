@@ -1,0 +1,39 @@
+# 依存パッケージ
+node_modules/
+vendor/
+
+# 環境変数・秘密情報
+.env
+.env.backup
+.env.production
+
+# ログ
+*.log
+npm-debug.log*
+
+# テスト成果物
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.phpunit.cache/
+.phpunit.result.cache
+
+# Laravel ビルド成果物
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+
+# Claude Code のローカル設定
+.claude/settings.local.json
+
+# OS / エディタが生成するファイル
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.fleet/
+.nova/
+.zed/
