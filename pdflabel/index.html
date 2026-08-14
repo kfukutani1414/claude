@@ -66,6 +66,43 @@
     color: #555;
     font-size: 0.9em;
   }
+  .comboBox {
+    position: relative;
+  }
+  .comboBox input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 1em;
+  }
+  .comboBoxOptions {
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 12em;
+    overflow-y: auto;
+    margin: 2px 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  .comboBoxOptions li {
+    padding: 6px 8px;
+    cursor: pointer;
+  }
+  .comboBoxOptions li:hover,
+  .comboBoxOptions li.highlighted {
+    background: #eef4ff;
+  }
+  .comboBoxOptions li.noMatch {
+    color: #888;
+    cursor: default;
+  }
 </style>
 </head>
 <body>
@@ -113,9 +150,9 @@
 
   <fieldset>
     <legend>用紙プリセット</legend>
-    <div class="formRow">
-      <label for="paperPreset">プリセット</label>
-      <select id="paperPreset" name="paperPreset"></select>
+    <div class="comboBox">
+      <input type="text" id="paperPresetInput" autocomplete="off" placeholder="プリセットを検索（例: エーワン, 24面）">
+      <ul id="paperPresetOptions" class="comboBoxOptions" hidden></ul>
     </div>
   </fieldset>
 
@@ -140,20 +177,18 @@
 <!-- PDF生成にはjsPDFライブラリを使う -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
 <script>
-  // 用紙プリセットのセレクトボックスを組み立てる
-  var paperPresetSelect = document.getElementById('paperPreset');
-  labelList.forEach(function (preset, index) {
-    var option = document.createElement('option');
-    option.value = String(index);
-    option.textContent = preset.name;
-    paperPresetSelect.appendChild(option);
-  });
+  // 用紙プリセットの検索コンボボックス
+  // テキスト入力で名前に部分一致するプリセットだけに絞り込んで表示する
+  var paperPresetInput = document.getElementById('paperPresetInput');
+  var paperPresetOptions = document.getElementById('paperPresetOptions');
+  var highlightedIndex = -1; // 絞り込み結果内でのキーボード選択位置
 
-  // プリセットを選択したら、余白・ラベルサイズ・ラベル間余白の入力欄をまとめて上書きする
-  // （「手動設定」など数値を持たないプリセットの場合は何もしない。選択後も数値は自由に微調整できる）
-  paperPresetSelect.addEventListener('change', function () {
-    var preset = labelList[Number(paperPresetSelect.value)];
-    if (!preset || preset.labelWidth === undefined) {
+  // プリセットを適用する（「手動設定」など数値を持たないプリセットの場合は何もしない。
+  // 適用後も余白・ラベルサイズ・ラベル間余白の各数値は自由に微調整できる）
+  function applyPreset(preset) {
+    paperPresetInput.value = preset.name;
+    closePaperPresetOptions();
+    if (preset.labelWidth === undefined) {
       return;
     }
     document.getElementById('marginTop').value = preset.marginTop;
@@ -163,7 +198,88 @@
     document.getElementById('labelWidth').value = preset.labelWidth;
     document.getElementById('labelHeight').value = preset.labelHeight;
     document.getElementById('labelGap').value = preset.labelGap;
+  }
+
+  // 入力中の文字列を含むプリセットだけを一覧表示する
+  // showAllがtrueの場合は現在の入力内容に関わらず全件表示する（フォーカス時用）
+  function renderPaperPresetOptions(showAll) {
+    var keyword = showAll ? '' : paperPresetInput.value.trim().toLowerCase();
+    var matches = labelList.filter(function (preset) {
+      return preset.name.toLowerCase().indexOf(keyword) !== -1;
+    });
+
+    paperPresetOptions.innerHTML = '';
+    highlightedIndex = -1;
+
+    if (matches.length === 0) {
+      var noMatchItem = document.createElement('li');
+      noMatchItem.className = 'noMatch';
+      noMatchItem.textContent = '該当するプリセットがありません';
+      paperPresetOptions.appendChild(noMatchItem);
+    } else {
+      matches.forEach(function (preset) {
+        var item = document.createElement('li');
+        item.textContent = preset.name;
+        item.addEventListener('mousedown', function (event) {
+          // blurより先にmousedownが発火するようpreventDefaultでフォーカス喪失を防ぐ
+          event.preventDefault();
+          applyPreset(preset);
+        });
+        paperPresetOptions.appendChild(item);
+      });
+    }
+
+    paperPresetOptions.hidden = false;
+  }
+
+  function closePaperPresetOptions() {
+    paperPresetOptions.hidden = true;
+    highlightedIndex = -1;
+  }
+
+  // キーボードでの選択ハイライトを更新する
+  function updateHighlight(items) {
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle('highlighted', i === highlightedIndex);
+    }
+    if (highlightedIndex >= 0 && items[highlightedIndex]) {
+      items[highlightedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  paperPresetInput.addEventListener('focus', function () {
+    // フォーカス時は絞り込まず全件表示し、そのまま文字入力で置き換えられるようにする
+    renderPaperPresetOptions(true);
+    paperPresetInput.select();
   });
+  paperPresetInput.addEventListener('input', function () {
+    renderPaperPresetOptions(false);
+  });
+  paperPresetInput.addEventListener('blur', closePaperPresetOptions);
+
+  paperPresetInput.addEventListener('keydown', function (event) {
+    var items = paperPresetOptions.querySelectorAll('li:not(.noMatch)');
+    if (items.length === 0) {
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      highlightedIndex = (highlightedIndex + 1) % items.length;
+      updateHighlight(items);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      highlightedIndex = (highlightedIndex - 1 + items.length) % items.length;
+      updateHighlight(items);
+    } else if (event.key === 'Enter' && highlightedIndex >= 0) {
+      event.preventDefault();
+      items[highlightedIndex].dispatchEvent(new MouseEvent('mousedown'));
+    } else if (event.key === 'Escape') {
+      closePaperPresetOptions();
+    }
+  });
+
+  // 初期表示は「手動設定」
+  paperPresetInput.value = labelList[0].name;
 
   // 日本語フォント（NotoSansJP）のTTFファイルのURL
   // jsPDF用に変換済みのフォントJSを配布するCDNは存在しないため、
