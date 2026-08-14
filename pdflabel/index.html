@@ -112,6 +112,14 @@
   </fieldset>
 
   <fieldset>
+    <legend>用紙プリセット</legend>
+    <div class="formRow">
+      <label for="paperPreset">プリセット</label>
+      <select id="paperPreset" name="paperPreset"></select>
+    </div>
+  </fieldset>
+
+  <fieldset>
     <legend>テキスト</legend>
     <div class="formRow">
       <label for="fontSize">フォントサイズ</label>
@@ -126,9 +134,37 @@
 
 </form>
 
+<!-- ラベル用紙プリセットのデータ -->
+<script src="labellist.js"></script>
+
 <!-- PDF生成にはjsPDFライブラリを使う -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
 <script>
+  // 用紙プリセットのセレクトボックスを組み立てる
+  var paperPresetSelect = document.getElementById('paperPreset');
+  labelList.forEach(function (preset, index) {
+    var option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = preset.name;
+    paperPresetSelect.appendChild(option);
+  });
+
+  // プリセットを選択したら、余白・ラベルサイズ・ラベル間余白の入力欄をまとめて上書きする
+  // （「手動設定」など数値を持たないプリセットの場合は何もしない。選択後も数値は自由に微調整できる）
+  paperPresetSelect.addEventListener('change', function () {
+    var preset = labelList[Number(paperPresetSelect.value)];
+    if (!preset || preset.labelWidth === undefined) {
+      return;
+    }
+    document.getElementById('marginTop').value = preset.marginTop;
+    document.getElementById('marginRight').value = preset.marginRight;
+    document.getElementById('marginBottom').value = preset.marginBottom;
+    document.getElementById('marginLeft').value = preset.marginLeft;
+    document.getElementById('labelWidth').value = preset.labelWidth;
+    document.getElementById('labelHeight').value = preset.labelHeight;
+    document.getElementById('labelGap').value = preset.labelGap;
+  });
+
   // 日本語フォント（NotoSansJP）のTTFファイルのURL
   // jsPDF用に変換済みのフォントJSを配布するCDNは存在しないため、
   // Google Fontsの公式リポジトリからTTFを直接取得しbase64変換して使用する
